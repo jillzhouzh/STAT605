@@ -1,0 +1,121 @@
+---
+title: "Final Project Report 2"
+author: "Zulin Zhou (zz69), Zhanhang Zhou (zz70) "
+output:
+  pdf_document:
+    fig_height: 5
+    fig_width: 5
+  html_document:
+    df_print: paged
+date: '10/29/2020'
+---
+
+#### Introduction
+We want to track pollutants levels in the air over US, especially in Texas, and observe if they are effected by other weather conditions. The main pollutant in the air is O3(ozone), so we will be tracking on that. Other pollutants level might have differnet importance in different districts so we are also planning to research on those factors
+
+#### Datasets
+We are using data from the official EPA website https://www.epa.gov/castnet. The main table is 22,290,625X17. The table takes weather conditions and ozone rates into consideration by scale of hour. We also have side charts indicating similar data by day, week and season. The secondart source chart, size 135,526X22 also sets down other pollutants including SO2, HNO3, ammonium and so on weekly scale.
+
+The main table includes the following factors:\
+1. SITE_ID, which stands for Site identification code, in form of CHAR\
+2. DATE_TIME, in form of STRING\
+3. WIND_DIRECTION, in form of NUMBER\
+4. WINDSPEED_SCALAR, which stands for scalar wind speed, in form of NUMBER\
+5. OZONE, in form of NUMBER\
+6. SOLAR_RADIATION, in form of NUMBER\
+7. FLOW_RATE, in form of NUMBER\
+8. SHELTER_TEMPERATURE, in form of NUMBER\
+9. QA_CODE, which stand for Quality assurance level of the record, in form of CHAR\
+10. SIGMA_THETA, which stands for Standard deviation of wind direction, in form of NUMBER\
+11. WETNESS, in form of NUMBER\
+12. TEMPERATURE, in form of NUMBER\
+13. UPDATE_DATE, in form of STRING\
+14. WINDSPEED, which stands for vector wind speed, in form of NUMBER\
+15. TEMPERATURE_DELTA, which stands for Temperature difference between 9m and 2m probes, in form of NUMBER\
+16. PRECIPITATION, in form of NUMBER\
+17. RELATIVE_HUMIDITY, in form of NUMBER\
+
+#### Project Goal
+Find relationship between pollutants and weather/year. In the first two milestones we observe the increase/decrease of certain pollutants under effects of tempeature, rainfall and see the fluctuation over time
+
+#### First Plot
+Showing the percipitation (reflected by flow rate), ozone level and temperature for Texas in Year 2015-2019. Data subsetted through webpage API.
+
+First load the subsetted data
+```{r, echo=TRUE}
+library(ggplot2)
+library(readr)
+Meteorological_Hourly <- read_csv("Meteorological - Hourly.csv")
+```
+
+Strip date and related variables
+```{r, echo=TRUE}
+setTime <- strptime(Meteorological_Hourly$DATE_TIME, "%m/%d/%Y %H:%M:%S")
+```
+
+```{r, echo=TRUE, fig.align='center', fig.height=9, fig.width=11}
+year <- as.numeric(format(setTime,'%Y'))
+date <- as.numeric(format(setTime,'%d'))
+temperature <- Meteorological_Hourly$TEMPERATURE
+ozone <- Meteorological_Hourly$OZONE
+rainfall <- Meteorological_Hourly$FLOW_RATE
+plotData <- data.frame(rainfall,ozone,temperature,year,date)
+```
+
+Plot and facet_wrap by year
+```{r, echo=TRUE, fig.align='center', fig.height=9, fig.width=11}
+ggplot(plotData) + 
+  geom_line(aes(x = date, y = ozone), color = "lightgray") +
+  geom_line(aes(x = date, y = rainfall), color = "black") +
+  geom_line(aes(x = date, y = temperature), color = "steelblue") +
+  facet_wrap(~year,ncol = 3) +
+  labs(title = "Fluctuation of ozone, rainfall and temperature by Year",
+       x = "Date",
+       y = "Value") +
+  theme_minimal()
+```
+
+#### FeedBack from polt 1
+Since there's too many observations in the same plots, it's hard to observe that all the values are on the same scale, and the data points are layered up by concertration of hours, so there's no apparent obervation. In order to get better visualization effect, we reduce our scope and radomly pick samples to represent in graph. Also updated project goal and picture theme according to the comments from last week.
+
+#### Data elimination using RSQLite
+```{r, echo=TRUE}
+library(RSQLite)
+dcon <- dbConnect(SQLite(), dbname = "/Users/mac/Desktop/fall 20/605/meteor.db")
+```
+
+Insert secondary table. The main table was already inserted, see the last page for more information. We will combine those command lines later.
+
+```{r, echo=TRUE}
+table <- read.csv(paste0("/Users/mac/Desktop/fall 20/605/Measurement.csv"))
+dbWriteTable(conn = dcon, name = "measurements", table,
+             append = TRUE, row.names = FALSE)
+```
+
+```{r, echo=TRUE}
+dbListTables(dcon)
+dbListFields(dcon,"meteor")
+dbListFields(dcon,"measurements")
+```
+
+From the database, pick 1000 random rows then get the weather and ozone layer data. Later we can use the selected data to plot.
+```{r, echo=TRUE}
+res <- dbSendQuery(conn = dcon, "
+SELECT SITE_ID, DATE_TIME, TEMPERATURE, FLOW_RATE, OZONE
+FROM meteor
+WHERE SITE_ID IN
+(SELECT SITE_ID
+FROM meteor
+WHERE TEMPERATURE IS NOT NULL and FLOW_RATE IS NOT NULL and OZONE IS NOT NULL
+ORDER BY RANDOM()
+LIMIT 1000);
+")
+mydf <- dbFetch(res, -1)
+dbClearResult(res)
+head(mydf)
+dbDisconnect(dcon)
+```
+
+```{r, echo=TRUE}
+dbDisconnect(dcon)
+```
